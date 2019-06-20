@@ -14,8 +14,8 @@ def get_length(pdbdatapath):
       pdblen = len(f.readline().strip())
       return(pdblen)
   except IOError:
-    print "Could not read file," pdbdatapath+"fasta.txt, target length could not be calculated."
-    sys.exit()
+      print("Could not read file, ", pdbdatapath,"fasta.txt, target length could not be calculated.")
+      sys.exit()
 
 def set_atom_lists(ref_chain, alt_chain, seq, val):
   ref_atoms = []
@@ -27,8 +27,8 @@ def set_atom_lists(ref_chain, alt_chain, seq, val):
   ref_chain_eq = [ ref_chain[i] for i in resnums ]                                                   # Do the same for native to remove eg HOH at end
   for ref_res, alt_res, amino, allow in zip(ref_chain_eq, alt_chain_eq, seq_eq, val_eq):
       if not ref_res.resname == alt_res.resname:
-        print ref_res.resname, alt_res.resname
-        exit()
+        print(ref_res.resname, alt_res.resname)
+        sys.exit()
       assert ref_res.id      == alt_res.id
       assert amino == Bio.PDB.Polypeptide.three_to_one(ref_res.resname)
       if allow:
@@ -65,15 +65,15 @@ if flex:
 if tempflex:
   args.remove("-t")
 if len(args) != 4:
-  print "USAGE:    script.py [-h] [-c] [-e] [-s] <pdbcode> <pathtodata> <decoysuperfolder>"
-pdbcode = args[1]                                                                       # Full name of target 
+  print("USAGE:    script.py [-h] [-c] [-e] [-s] <pdbcode> <pathtodata> <decoysuperfolder>")
+pdbcode = args[1] # Full name of target 
 pathtodata = args[2]                                                                    # Proteinprep directory
 decoysuperfolder = args[3]                                                              # Decoy directory path 
 
 ### TODO: new way to identify reverse (N-terminus) targets)
 rev = "_rev" == decoysuperfolder[-4:]
 
-print "Homology model scaffold:", homo
+print("Homology model scaffold:", homo)
 
 io = PDBIO()
 warnings.filterwarnings('always', message='.*discontinuous at.*')
@@ -94,7 +94,7 @@ elif homo:
 else:
   pdb = pathtodata + "/" +  pdbcode + ".pdb"
 native = pdbcode                                      
-print "Using target structure: ", pdb
+print("Using target structure: ", pdb)
 if tempflex:
   with open(pathtodata + "/" + pdbcode + ".chain") as fin:    # Template chain ID
       chain = fin.readline().strip()
@@ -114,18 +114,15 @@ else:
 #  tmhs = [ [ int(i) for i in line.strip().split() ] for line in lines[4:] ]
 #with open(pathtodata + "/" + pdbcode + ".length") as fin:
 #  length = int(fin.readline().strip())
-length = get_length(pdbcode)
+length = get_length(pathtodata + "/" + pdbcode)
 
-
-
-print "Number of residues to score:", length-seg                                      # Length of sampled region 
+print("Number of residues to score:", length-seg)                                      # Length of sampled region 
 
 with open(pathtodata + "/" + pdbcode + ".fasta.txt") as fin:
   lines = fin.readlines()
   sequence = lines[1].strip()
 
-print(len(sequence))
-print(length)
+length = len(sequence)
 print(seg)
 
 ########## Setting atoms to score ##########
@@ -167,12 +164,14 @@ if flex or tempflex:
 structure = pdb_parser.get_structure(native, pdb)
 nat_chain = structure[0][chain]
 
-if saulo:
-  decoys = [ decoyfile for decoyfile in glob.glob(decoysuperfolder + "/" + pdbcode + "*linear*") ]
-elif rosetta: 
-  decoys = [ decoyfile for decoyfile in glob.glob(decoysuperfolder + "/*") ]
-else:
-    decoys = [ decoyfile for decoyfile in glob.glob(decoysuperfolder + "/" + myhost + "/" + pdbcode + "*linear*") if decoyfile[-4:] != ".cut" and decoyfile[-4:] != ".end" and decoyfile[-9:] != ".rescored" ]
+#if saulo:
+#  decoys = [ decoyfile for decoyfile in glob.glob(decoysuperfolder + "/" + pdbcode + "*linear*") ]
+#elif rosetta: 
+#  decoys = [ decoyfile for decoyfile in glob.glob(decoysuperfolder + "/*") ]
+#else:
+#    decoys = [ decoyfile for decoyfile in glob.glob(decoysuperfolder + "/" + myhost + "/" + pdbcode + "*linear*") if decoyfile[-4:] != ".cut" and decoyfile[-4:] != ".end" and decoyfile[-9:] != ".rescored" ]
+with open(pdbcode + ".pcons_lst", "r") as f:
+  decoys = [ line.strip() for line in f ]
 
 if end:
   pref = "endscore_"
@@ -191,7 +190,7 @@ else:
 
 
 count = len(decoys)
-print "Number of decoys to score:", count  
+print("Number of decoys to score:", count)  
 with open(pref + decoysuperfolder,'a') as fout:
   for decoy in decoys:
     decoyname = decoy.rsplit('/',1)[1]
@@ -199,7 +198,7 @@ with open(pref + decoysuperfolder,'a') as fout:
     try:
       decoy_chain = decoy_structure[0]
     except KeyError:
-      print decoy
+      print(decoy)
       continue
     decoy_chain = decoy_structure[0][decoychain]
 
@@ -242,7 +241,7 @@ with open(pref + decoysuperfolder,'a') as fout:
 
     count -= 1
     if count % 200 == 0:
-      print "count", count
+      print("count", count)
   #if homo:
   #  print '\t'.join([str(res.id[1]) for res,val in zip(nat_chain,homo_valid) if val])
   #print '\t'.join([str(res.id[1]) for res,val in zip(nat_chain,valid) if val])
