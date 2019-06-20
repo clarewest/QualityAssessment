@@ -7,6 +7,16 @@ import warnings
 import sys
 import os
 
+def get_length(pdbdatapath):
+  try:
+    with open(pdbdatapath+".fasta.txt", "r") as f:
+      f.readline()
+      pdblen = len(f.readline().strip())
+      return(pdblen)
+  except IOError:
+    print "Could not read file," pdbdatapath+"fasta.txt, target length could not be calculated."
+    sys.exit()
+
 def set_atom_lists(ref_chain, alt_chain, seq, val):
   ref_atoms = []
   alt_atoms = []
@@ -59,6 +69,8 @@ if len(args) != 4:
 pdbcode = args[1]                                                                       # Full name of target 
 pathtodata = args[2]                                                                    # Proteinprep directory
 decoysuperfolder = args[3]                                                              # Decoy directory path 
+
+### TODO: new way to identify reverse (N-terminus) targets)
 rev = "_rev" == decoysuperfolder[-4:]
 
 print "Homology model scaffold:", homo
@@ -84,8 +96,6 @@ else:
 native = pdbcode                                      
 print "Using target structure: ", pdb
 if tempflex:
-#  with open("../../" + pdbcode + ".tempchain") as fin:
-#    chain = fin.readline().strip()
   with open(pathtodata + "/" + pdbcode + ".chain") as fin:    # Template chain ID
       chain = fin.readline().strip()
       if len(chain) is 0:
@@ -102,8 +112,11 @@ elif crystal or tempflex:
 else:
   decoychain = chain                                        # For normal SAINT2 Eleanor it's the same as seg
 #  tmhs = [ [ int(i) for i in line.strip().split() ] for line in lines[4:] ]
-with open(pathtodata + "/" + pdbcode + ".length") as fin:
-  length = int(fin.readline().strip())
+#with open(pathtodata + "/" + pdbcode + ".length") as fin:
+#  length = int(fin.readline().strip())
+length = get_length(pdbcode)
+
+
 
 print "Number of residues to score:", length-seg                                      # Length of sampled region 
 
