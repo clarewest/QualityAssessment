@@ -7,14 +7,14 @@ import warnings
 import sys
 import os
 
-def get_length(pdbdatapath):
+def get_sequence(pdbdatapath):
   try:
     with open(pdbdatapath+".fasta.txt", "r") as f:
       f.readline()
-      pdblen = len(f.readline().strip())
-      return(pdblen)
+      seq = f.readline().strip()
+      return seq, len(seq);
   except IOError:
-      print("Could not read file, ", pdbdatapath,"fasta.txt, target length could not be calculated.")
+      print("Could not read fasta file, ", pdbdatapath,"fasta.txt")
       sys.exit()
 
 def set_atom_lists(ref_chain, alt_chain, seq, val):
@@ -112,18 +112,9 @@ elif crystal or tempflex:
 else:
   decoychain = chain                                        # For normal SAINT2 Eleanor it's the same as seg
 #  tmhs = [ [ int(i) for i in line.strip().split() ] for line in lines[4:] ]
-#with open(pathtodata + "/" + pdbcode + ".length") as fin:
-#  length = int(fin.readline().strip())
-length = get_length(pathtodata + "/" + pdbcode)
 
+sequence, length = get_sequence(pathtodata + "/" + pdbcode)
 print("Number of residues to score:", length-seg)                                      # Length of sampled region 
-
-with open(pathtodata + "/" + pdbcode + ".fasta.txt") as fin:
-  lines = fin.readlines()
-  sequence = lines[1].strip()
-
-length = len(sequence)
-print(seg)
 
 ########## Setting atoms to score ##########
 score_residues = [False] * len(sequence)
