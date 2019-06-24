@@ -127,6 +127,17 @@ while [ ! $# -eq 0 ]; do
       SCAFFOLD=true
       SEG=$2
       TERM=$3
+      LENGTH=$(tail -n1 $TARGET.fasta.txt | tr -d '\n' | wc -c)
+      if [ $TERM = "C" ]; then
+        BEGIN=$((SEG+1))
+        END=$LENGTH
+      elif [ $TERM = "N" ]; then
+        BEGIN=1
+        END=$((LENGTH-SEG-1))
+      else
+        echo "Not a valid terminus"
+        exit
+      fi
       shift
       shift
       ;;
@@ -160,8 +171,7 @@ if [ $RUN_PPV = true ]; then
   if [ ! -f $TARGET.models.metapsicov.stage1 ];
   then 
     if [ $SCAFFOLD = true ]; then
-      ### only include relevant contacts
-      exit
+      awk -v START=$BEGIN -v STOP=$END '{if ($1 >= START && $1 <= STOP && $2>=START && $2 <= STOP && $5 >= 0.5) print $0}' $TARGET.metapsicov.stage1 > $TARGET.models.metapsicov.stage1
     else
       awk '{ if ($5>=0.5) print $0}' $TARGET.metapsicov.stage1 > $TARGET.models.metapsicov.stage1
     fi
@@ -327,7 +337,8 @@ fi
 
 if [ $RUN_EIGEN = true ]; then
   echo "Running EigenTHREADER..."
-  $QA/bin/run_eigen.sh $TARGET ${PWD##*/} > $TARGET.eigenlog 
+  $QA/bin/run_eigen.sh $TARGET ${PWD##*/} > $TARGET.eigenlog
+  mkdir -p Eigen_$TARGET 
   mv "$TARGET"_*.model.pdb Eigen_$TARGET/ 
   cp $TARGET.out $TARGET.out.backup;
   $QA/bin/paste_eig_lst.sh $TARGET > $TARGET.out.tmp;
@@ -406,17 +417,6 @@ if [ $GATHER_PROQ = true ]; then
 fi
 
 if [ $GATHER_SAMPLED = true ]; then 
-  LENGTH=$(tail -n1 $TARGET.fasta.txt | tr -d '\n' | wc -c)
-  if [ $TERM = "C" ]; then
-    BEGIN=$((SEG+1))
-    END=$LENGTH
-  elif [ $TERM = "N" ]; then
-    BEGIN=1
-    END=$((LENGTH-SEG-1))
-  else
-    echo "Not a valid terminus"
-    exit
-  fi
   echo "Gathering sampled LDDT scores..."
   $QA/bin/get_local_lddts $TARGET.all_lddts $BEGIN $END | cut -d "/" -f2- > $TARGET.local_lddts
   echo "Done: $TARGET.local_lddts"

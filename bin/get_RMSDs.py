@@ -1,238 +1,246 @@
 # coding: utf-8
-import glob
+import os, sys, warnings, glob, argparse 
 import Bio.PDB
-import numpy
+import numpy as np
 from Bio.PDB import PDBParser, PPBuilder, PDBIO
-import warnings
-import sys
-import os
 
-def get_sequence(pdbdatapath):
-  try:
-    with open(pdbdatapath+".fasta.txt", "r") as f:
-      f.readline()
-      seq = f.readline().strip()
-      return seq, len(seq);
-  except IOError:
-      print("Could not read fasta file, ", pdbdatapath,"fasta.txt")
-      sys.exit()
+class Target:
+        def __init__(self, pdbcode, terminus, region, modeldir, datadir, reference):
+            self.pdbcode = pdbcode
+            self.region = region
+            self.modeldir = modeldir+"/" if modeldir else self.pdbcode+"/"
+            self.datadir = datadir+"/" if datadir else "./"
+            self.sequence = self.get_sequence()
+            self.length = len(self.sequence)
+            self.seg = self.get_seg()
+            ## name of file to score models against 
+            ## if no reference is given, default to the name of the target
+            self.pdbfile = datadir + reference+".pdb" if reference else datadir + self.pdbcode+".pdb"
+            self.terminus = terminus if terminus else self.get_terminus()
+            self.templen = self.seg + 15
+            self.chain = "A"
+            self.decoychain = "A"
+            self.sampled = self.get_sampled_range()
+            
+        ## Read sequence from fasta file and calculate length
+        def get_sequence(self):
+            try:
+                fastafile = self.datadir + self.pdbcode + ".fasta.txt"
+                with open(fastafile, "r") as f:
+                    f.readline()
+                    seq = f.readline().strip()
+                    return seq
+            except IOError:
+                print("Could not read fasta file:", fastafile)
+                sys.exit()
+                
+        ## Read the length of the segment region (unsampled structure)
+        ## unless the entire structure is being scored
+        def get_seg(self):
+            if self.region == "all":
+                return(0)
+            else:
+                try:
+                    segfile = self.datadir + self.pdbcode + ".seg"
+                    with open(segfile, "r") as f:
+                        seg = int(f.readline().strip())
+                        return(seg)
+                except IOError:
+                    print("Could not read seg from file", segfile)
+                    sys.exit()
+                    
+        ## Read terminus from file if not provided as an argument
+        def get_terminus(self):
+            termfile = self.datadir + self.pdbcode + ".term"
+            try:
+                with open(termfile, "r") as f:
+                    return(f.readline().strip())
+            except IOError:
+                print("Terminus not provided as argument or via", termfile)
+                sys.exit()
+
+        ## Get the indices of residues that were sampled
+        def get_sampled_range(self):
+            if self.terminus == "N":
+                sampled_range = range(0, self.length - self.seg)
+            else:
+                sampled_range = range(self.seg, self.length)
+            return(sampled_range)
+        
+        ## Get the indices of residues to be scored
+        def get_score_residues(self):
+            if self.region == "all": 
+                ## Score all residues
+                score_residues = [True] * self.length
+            elif self.region == "flex":
+                ## Just score the flexible region
+                if self.terminus == "N":
+                    flex_range = range(self.length - self.templen, self.length - self.seg)
+                else: 
+                    flex_range = range(self.seg, self.templen)
+                score_residues = [ True if i in flex_range else False for i in range(0, self.length)]
+            else:
+                ## Score only sampled residues
+                score_residues = [ True if i in self.sampled else False for i in range(0, self.length)]
+            return(score_residues)
+        
+        ## Get the indices of scaffold residues to superimpose
+        def get_scaffold_residues(self):
+            if self.region in [ "all", "sampled" ]:
+                ## superimpose the same region as scoring
+                scaffold_range = self.get_score_residues() 
+            if self.terminus == "N":
+                scaffold_range = range(self.length - self.seg, self.length)
+            else:
+                scaffold_range = range(0, self.seg)
+            scaffold_residues = [ True if i in scaffold_range else False for i in range(0, self.length) ]
+            return(scaffold_residues)
 
 def set_atom_lists(ref_chain, alt_chain, seq, val):
-  ref_atoms = []
-  alt_atoms = []
-  resnums = [ residue.id[1] for residue in ref_chain.get_residues() if residue.id[1] <= len(seq) ]   # Get residue numbers present in native
-  alt_chain_eq = [ alt_chain[i] for i in resnums ]                                                   # Only include equivalent from decoy
-  seq_eq = [ seq[i-1] for i in resnums ]                                                             # Only include equivalent from sequence
-  val_eq = [ val[i-1] for i in resnums ]
-  ref_chain_eq = [ ref_chain[i] for i in resnums ]                                                   # Do the same for native to remove eg HOH at end
-  for ref_res, alt_res, amino, allow in zip(ref_chain_eq, alt_chain_eq, seq_eq, val_eq):
-      if not ref_res.resname == alt_res.resname:
-        print(ref_res.resname, alt_res.resname)
-        sys.exit()
-      assert ref_res.id      == alt_res.id
-      assert amino == Bio.PDB.Polypeptide.three_to_one(ref_res.resname)
-      if allow:
-        for atomtype in ["CA","C","O","N"]:
-          ref_atoms.append(ref_res[atomtype])
-          alt_atoms.append(alt_res[atomtype])
-  return ref_atoms, alt_atoms
+    ref_atoms = []
+    alt_atoms = []
+    # Get residue numbers present in the reference structure
+    resnums = [ residue.id[1] for residue in ref_chain.get_residues() if residue.id[1] <= len(seq) ]   
+    # Only include equivalent residues from the model
+    alt_chain_eq = [ alt_chain[i] for i in resnums ]
+    # Only include equivalent from the sequence
+    seq_eq = [ seq[i-1] for i in resnums ]          
+    # Do the same for reference to remove eg HOH at end
+    val_eq = [ val[i-1] for i in resnums ]
+    ref_chain_eq = [ ref_chain[i] for i in resnums ]     
+    for ref_res, alt_res, amino, allow in zip(ref_chain_eq, alt_chain_eq, seq_eq, val_eq):
+        if not ref_res.resname == alt_res.resname:
+            print(ref_res.resname, alt_res.resname)
+            sys.exit()
+        assert ref_res.id == alt_res.id
+        assert amino == Bio.PDB.Polypeptide.three_to_one(ref_res.resname)
+        if allow:
+            for atomtype in ["CA","C","O","N"]:
+                ref_atoms.append(ref_res[atomtype])
+                alt_atoms.append(alt_res[atomtype])
+    return ref_atoms, alt_atoms
 
 def get_rmsd(ref_atoms, alt_atoms):
-    rmsd = numpy.sqrt(sum([ (pair[0] - pair[1]) ** 2 for pair in zip(alt_atoms, ref_atoms) ]) / len(alt_atoms))     
+    rmsd = np.sqrt(sum([ (pair[0] - pair[1]) ** 2 for pair in zip(alt_atoms, ref_atoms) ]) / len(alt_atoms))     
     return rmsd
 
-myhost = os.uname()[1]
-args = sys.argv
-homo = "--homo" in args or "-h" in args         # Segment and native not from same file 
-crystal = "--crystal" in args or "-c" in args   # Segment from a different crystal structure
-end = "--end" in args or "-e" in args           # Ignore segment in RMSD
-saulo = "--saulo" in args or "-s" in args       # No segment, different file set-up
-rosetta = "--rosetta" in args or "-r" in args   # Saulo but with different file set-up
-flex = "--flex" in args or "-f" in args         # Score the flexible region
-tempflex = "--tempflex" in args or "-t" in args # Score the flexible region against the template
-if crystal:
-  args.remove("-c")
-if homo:
-  args.remove("-h")
-if saulo:
-  args.remove("-s")
-if end:
-  args.remove("-e")
-if rosetta:
-  args.remove("-r")
-if flex:
-  args.remove("-f")
-if tempflex:
-  args.remove("-t")
-if len(args) != 4:
-  print("USAGE:    script.py [-h] [-c] [-e] [-s] <pdbcode> <pathtodata> <decoysuperfolder>")
-pdbcode = args[1] # Full name of target 
-pathtodata = args[2]                                                                    # Proteinprep directory
-decoysuperfolder = args[3]                                                              # Decoy directory path 
+def score_target(target, nosuperimpose_flag):
+    
+    print("Scoring target:", target.pdbcode)
+    print("Reference structure:", target.pdbfile)
 
-### TODO: new way to identify reverse (N-terminus) targets)
-rev = "_rev" == decoysuperfolder[-4:]
+    score_residues = target.get_score_residues()
+    scaf_residues = target.get_scaffold_residues()
 
-print("Homology model scaffold:", homo)
+    print("Scoring", sum(score_residues), "residues of", target.length)
+    
+    io = PDBIO()
+    warnings.filterwarnings('always', message='.*discontinuous at.*')
+    pdb_parser = PDBParser(PERMISSIVE=1,QUIET=True)
 
-io = PDBIO()
-warnings.filterwarnings('always', message='.*discontinuous at.*')
-pdb_parser = PDBParser(PERMISSIVE=1,QUIET=True)
+    structure = pdb_parser.get_structure(target.pdbcode, target.pdbfile)
+    nat_chain = structure[0][target.chain]
 
-if saulo or rosetta:
-  seg = 0                                                       
-else:
-  with open(pathtodata + "/" + pdbcode + ".seg") as fin:
-    seg = int(fin.readline().strip())
-if flex or tempflex:
-  with open(pathtodata + "/"+ pdbcode + ".templen") as fin:
-    templen = int(fin.readline().strip())
-if tempflex:
-  pdb = pathtodata + "/" + pdbcode + ".pdb"
-elif homo:
-  pdb = pathtodata + "/real_" + pdbcode + ".pdb"                                            # PDB file of native structure (pdbcode.pdb is the template for seg)
-else:
-  pdb = pathtodata + "/" +  pdbcode + ".pdb"
-native = pdbcode                                      
-print("Using target structure: ", pdb)
-if tempflex:
-  with open(pathtodata + "/" + pdbcode + ".chain") as fin:    # Template chain ID
-      chain = fin.readline().strip()
-      if len(chain) is 0:
-        chain = " "
-else:
-  chain = "A"
-if saulo or rosetta:                                           # Scaffold chain is A for homology model or normal decoy
-  decoychain = "A"
-elif crystal or tempflex:
-  with open(pathtodata + "/" + pdbcode + ".chain") as fin:    # Otherwise its template crystal structure chain
-      decoychain = fin.readline().strip()
-      if len(decoychain) is 0:
-        decoychain = " "
-else:
-  decoychain = chain                                        # For normal SAINT2 Eleanor it's the same as seg
-#  tmhs = [ [ int(i) for i in line.strip().split() ] for line in lines[4:] ]
+    ###########################################
 
-sequence, length = get_sequence(pathtodata + "/" + pdbcode)
-print("Number of residues to score:", length-seg)                                      # Length of sampled region 
+    with open(target.pdbcode + ".lst", "r") as f:
+        decoys = [ target.modeldir + "/" + line.strip() for line in f ]
 
-########## Setting atoms to score ##########
-score_residues = [False] * len(sequence)
-if saulo or rosetta:
-  score_residues = [True] * len(sequence)           # Inclue all in scoring
-else:
-  if rev:
-      samplerange = range(0, length-seg)
-  else:
-      samplerange = range(seg,length)
-  for i in samplerange:
-    score_residues[i] = True                         # Include only sampled region in scoring
-
-######### Settings atoms as scaffold ######
-if homo:                                            # If seg is not from the native, it needs to be superimposed
-  homo_scaf_residues = [False] * len(sequence)
-  if rev:
-      scafrange = range(length-seg, length)
-  else:
-      scafrange = range(0,seg)
-  for i in scafrange:
-    homo_scaf_residues[i] = True
-if end or saulo or rosetta:
-  homo_scaf_residues =  [ i for i in score_residues ]  # Superimpose same region as scoring 
-
-######## Set flex region for scoring ######            # Score just the flex region
-if flex or tempflex:
-  flex_score_residues = [False] * len(sequence)
-  if rev:
-      flexrange = range(length-templen,length-seg)
-  else:
-      flexrange = range(seg,templen)
-  for i in flexrange:
-      flex_score_residues[i] = True
-
-###########################################
-
-structure = pdb_parser.get_structure(native, pdb)
-nat_chain = structure[0][chain]
-
-#if saulo:
-#  decoys = [ decoyfile for decoyfile in glob.glob(decoysuperfolder + "/" + pdbcode + "*linear*") ]
-#elif rosetta: 
-#  decoys = [ decoyfile for decoyfile in glob.glob(decoysuperfolder + "/*") ]
-#else:
-#    decoys = [ decoyfile for decoyfile in glob.glob(decoysuperfolder + "/" + myhost + "/" + pdbcode + "*linear*") if decoyfile[-4:] != ".cut" and decoyfile[-4:] != ".end" and decoyfile[-9:] != ".rescored" ]
-with open(pdbcode + ".pcons_lst", "r") as f:
-  decoys = [ line.strip() for line in f ]
-
-if end:
-  pref = "endscore_"
-elif flex:
-  pref = "flexscore_"
-elif tempflex:
-  pref = "tempflex_"
-else:
-  pref = "pyscore_"
-
-#if os.path.exists(pref + decoysuperfolder):
-#  with open(pref + decoysuperfolder) as fin:
-#    donedecoys = [ line.strip().split()[0] for line in fin.readlines() ]
-#  donedecoys = [ decoysuperfolder + "/" + filename.rsplit("_",2)[1] + "/" + filename for filename in donedecoys ]
-#  decoys = sorted(list(set(decoys) - set(donedecoys)))
-
-
-count = len(decoys)
-print("Number of decoys to score:", count)  
-with open(pref + decoysuperfolder,'a') as fout:
-  for decoy in decoys:
-    decoyname = decoy.rsplit('/',1)[1]
-    decoy_structure = pdb_parser.get_structure(pdbcode, decoy)
-    try:
-      decoy_chain = decoy_structure[0]
-    except KeyError:
-      print(decoy)
-      continue
-    decoy_chain = decoy_structure[0][decoychain]
-
-    nat_score_atoms, decoy_score_atoms =  set_atom_lists(nat_chain, decoy_chain, sequence, score_residues)     # List of residues to score RMSD
-
-############### Superimpose is required ########
-    if homo or saulo or end or rosetta or tempflex:
-
-      nat_scaf_atoms, decoy_scaf_atoms =  set_atom_lists(nat_chain, decoy_chain, sequence, homo_scaf_residues)     # List of atoms to set as scaffold
-
-      super_imposer = Bio.PDB.Superimposer()
-      super_imposer.set_atoms(nat_scaf_atoms, decoy_scaf_atoms)                                                    # Superimpose scaffold of decoy and target
-      super_imposer.apply(decoy_chain.get_atoms())  
-      if count == 1 and (not tempflex) and (not end):
-        with open("homo_seg_accuracy",'a') as foutseg:
-            foutseg.write(decoysuperfolder + " " + pref[:-1] + "\t%0.2f" % (super_imposer.rms) + "\n")                      # Output RMSD of homology model against target segment (only for the last decoy)
-
-      #io=Bio.PDB.PDBIO()
-      #io.set_structure(decoy_structure)
-      #io.save("pdb_out_filename.pdb")
-
-############ Get RMSD of sampled region ########
-    if not tempflex:
-      rmsd = get_rmsd(nat_score_atoms, decoy_score_atoms)                                                   # Get RMSD of sampled region after superimposition
+    if target.region == "end":
+        suffix = ".endscores"
+    elif target.region == "flex":
+        suffix = ".flexscores"
+    elif target.region == "tempflex":
+        suffix = ".tempflexscores"
     else:
-      rmsd = super_imposer.rms
-    if not (flex or tempflex):
-      fout.write("{}\t{:.6f}\n".format(decoyname, rmsd))                                                                                     # Output RMSD of decoy
-    else:
-      nat_flex_score_atoms, decoy_flex_score_atoms =  set_atom_lists(nat_chain, decoy_chain, sequence, flex_score_residues)     # List of atoms to set as scaffold
-      flex1_rmsd = get_rmsd(nat_flex_score_atoms, decoy_flex_score_atoms)
-      super_imposer = Bio.PDB.Superimposer()
-      super_imposer.set_atoms(nat_flex_score_atoms, decoy_flex_score_atoms)                                                    # Superimpose scaffold of decoy and target
-      super_imposer.apply(decoy_chain.get_atoms()) 
-      flex2_rmsd = super_imposer.rms
-      if flex:
-        fout.write("{}\t{:.6f}\t{:.6f}\t{:.6f}\n".format(decoyname, rmsd, flex1_rmsd, flex2_rmsd))            # Output RMSD of decoy
-      elif tempflex:
-        fout.write("{}\t{:.6f}\t{:.6f}\t{:.6f}\n".format(decoyname, rmsd, flex1_rmsd, flex2_rmsd))            # Output RMSD of decoy
+        suffix = ".sampledscores"
+    
+    ndecoys = len(decoys)
+    print("Number of decoys to score:", ndecoys)
 
-    count -= 1
-    if count % 200 == 0:
-      print("count", count)
-  #if homo:
-  #  print '\t'.join([str(res.id[1]) for res,val in zip(nat_chain,homo_valid) if val])
-  #print '\t'.join([str(res.id[1]) for res,val in zip(nat_chain,valid) if val])
+    with open(target.pdbcode + suffix,'a') as fout:
+        for count, decoy in enumerate(decoys):
+            decoyname = decoy.rsplit('/',1)[1]
+            decoy_structure = pdb_parser.get_structure(target.pdbcode, decoy)
+            try:
+                decoy_chain = decoy_structure[0]
+            except KeyError:
+                print(decoy)
+                continue
+            decoy_chain = decoy_structure[0][target.decoychain]
+
+            ## List of residues to score RMSD
+            nat_score_atoms, decoy_score_atoms =  set_atom_lists(nat_chain, decoy_chain, target.sequence, score_residues)
+
+            ## Superimpose if required ########
+            if nosuperimpose_flag:
+                segment_rmsd = 0
+            else:
+                ## list of atoms to set as scaffold
+                nat_scaf_atoms, decoy_scaf_atoms =  set_atom_lists(nat_chain, decoy_chain, target.sequence, target.get_scaffold_residues())
+                ## superimpose the scaffold of model and the reference structure
+                super_imposer = Bio.PDB.Superimposer()
+                super_imposer.set_atoms(nat_scaf_atoms, decoy_scaf_atoms)
+                super_imposer.apply(decoy_chain.get_atoms())  
+                ## get the rmsd of the scaffold against the reference segment
+                ## this should be the same for all decoys
+                segment_rmsd = super_imposer.rms
+
+    ############ Get RMSD of sampled region ########
+            ## Get the RMSD of the scoring region when segment is superimposed
+            global_rmsd = get_rmsd(nat_score_atoms, decoy_score_atoms)
+
+            ## Get the RMSD of the scoring region when minimised against reference
+            # List of scoring atoms to set as scaffold
+            nat_score_atoms, decoy_score_atoms =  set_atom_lists(nat_chain, decoy_chain, target.sequence, score_residues)
+            # Superimpose scoring atoms of model and reference structure and get RMSD
+            super_imposer = Bio.PDB.Superimposer()
+            super_imposer.set_atoms(nat_score_atoms, decoy_score_atoms)     
+            super_imposer.apply(decoy_chain.get_atoms()) 
+            local_rmsd = super_imposer.rms
+
+            ## Output RMSD of model
+            fout.write("{}\t{:.6f}\t{:.6f}\t{:.6f}\n".format(decoyname, segment_rmsd, global_rmsd, local_rmsd))    
+
+            if (ndecoys - count) % 100 == 0:
+                print("Remaining:", ndecoys - count)
+
+
+if __name__ == '__main__':
+    ### Parse arguments ###
+    ## TODO add defaults for modelpath and datapath
+    parser = argparse.ArgumentParser(
+            description="Score RMSDs of sampled and/or flexible regions of SAINT2 models")
+    parser.add_argument("pdbcode", 
+                        help="the name of the target")
+    parser.add_argument("datapath", 
+                        help="path to data")
+    parser.add_argument("modelpath", 
+                        help="the directory containing the model structures")
+    parser.add_argument("--nosuperimpose",
+                        help="do not perform superposition (i.e. the segment and \
+                        reference structure are the same", 
+                        action="store_true")
+    parser.add_argument("--terminus", 
+                        help="terminus of sampled region. Default: reads .term", 
+                        choices = [ "C" , "N" ]) 
+    parser.add_argument("--region", 
+                        help="region of model to score",
+                        choices = [ "flex", "sampled", "all" , "tempflex", "end"],
+                        default = "flex")
+    parser.add_argument("--reference", 
+                        help="reference structure to score against")
+    parser.add_argument("--chain", 
+                        help="chain of reference structure",
+                        default = "A")
+
+    args = parser.parse_args()
+
+    target = Target(pdbcode = args.pdbcode,
+                    terminus = args.terminus,
+                    region = args.region,
+                    modeldir = args.modelpath + "/",
+                    datadir = args.datapath + "/",
+                    reference = args.reference)
+    
+    score_target(target, args.nosuperimpose)
