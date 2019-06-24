@@ -36,8 +36,8 @@ Run `get_features.sh` with the relevant arguments to calculate each stage.
 
 Run with the flag `--help` to get help:
 
-```console 
-bash get_features.sh --help
+``` console 
+$ bash get_features.sh --help
 
 ./get_features.sh [options] <NAME>
 
