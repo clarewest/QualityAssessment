@@ -10,29 +10,29 @@ Where DATASET is the name of a set of targets, and TARGET is a directory contain
 The following files are required in the data/DATASET directory: 
 Many of these files are generated using the commands in $QA/bin/parallelize.sh 
 
-TARGET/MODELS            : Ensure they all have a chain id. You can add the chain id "A" using the script:
+- TARGET/MODELS            : Ensure they all have a chain id. You can add the chain id "A" using the script:
                          - `$QA/bin/replace_chains.sh`
 
-TARGET.fasta             : sequence file
-TARGET.fasta.txt         : sequence file 
+- TARGET.fasta             : sequence file
+- TARGET.fasta.txt         : sequence file 
                            - NB this is a duplicate as difference software may require either format
-TARGET.aln               : alignment file (from contact prediction using metaPSICOV)
-TARGET.metapsicov.stage1 : metapsicov output (predicted contacts)
-TARGET.fasta.ss2         : (for EigenTHREADER) psipred output file (predicted SS) - not the one used by metapsicov!
+- TARGET.aln               : alignment file (from contact prediction using metaPSICOV)
+- TARGET.metapsicov.stage1 : metapsicov output (predicted contacts)
+- TARGET.fasta.ss2         : (for EigenTHREADER) psipred output file (predicted SS) - not the one used by metapsicov!
                            - see `$QA/bin/parallelize.sh`
 
-TARGET.lst               : A list of model names
-TARGET.pcons_lst         : A list of model names including the directory
-TARGET.proq_lst          : A list of model names including directory and .pdb extension
+- TARGET.lst               : A list of model names
+- TARGET.pcons_lst         : A list of model names including the directory
+- TARGET.proq_lst          : A list of model names including directory and .pdb extension
                            - you can generate these using `$QA/bin/make_lsts.sh TARGET`
 
-TARGET.con               : predicted contact file for use in SAINT2 scoring
-config_TARGET file       : SAINT2 configuration file with scoring weights (ensure the paths are correct)
+- TARGET.con               : predicted contact file for use in SAINT2 scoring
+- config_TARGET file       : SAINT2 configuration file with scoring weights (ensure the paths are correct)
 
 
 Run `get_features.sh` with the relevant arguments to calculate each stage.
 
-## get_features.sh
+## Running get_features.sh
 
 Run with the flag `--help` to get help:
 
@@ -69,19 +69,14 @@ $ bash get_features.sh --help
 
 ```
 
-
+## Output 
 During the process, the following files will be created:
 
-TARGET.out               : EigenTHREADER output
+- TARGET.out               : EigenTHREADER output
                            - note that model names must be added with $QA/bin/paste_eig_lst.sh
                              as they are truncated in the output of EigenTHREADER 
 
-TARGET.pcons.txt         : Pcons output
-
-Pcons, EigenTHREADER and Proq3D need to be run once on the ensemble of models. Run using:
-$QA/bin/run_eigen.sh $TARGET $DATASET    : requires TDB_DIR directory and files generated using assess_quality.sh
-$QA/bin/run_pcons                        : requires TARGET.pcons_lst
-$QA/bin/runproq3d.sh                     : requires proq_lst
+- TARGET.pcons.txt         : Pcons output
 
 
 
