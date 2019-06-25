@@ -27,8 +27,8 @@ RUN_STMSCORE=false
 RUN_SLDDT=false
 GATHER_SAMPLED=false
 #GATHER_FNAT=false
-#GATHER_FLEX=false
-#GATHER_END=false
+RUN_FLEX_RMSD=false
+RUN_END_RMSD=false
 #GATHER_LDDT=false
 
 
@@ -49,6 +49,8 @@ Optional arguments:\n
 \t-q | --proq\t\trun ProQ3D for all models and gather scores \n
 \t-m | --tmscore\t\tcalculate TM-score for all models\n
 \t-l | --lddt\t\tcalculate lddt for all models\n
+\t-f | --flexrmsd\t\tcalculate local and global rmsd of flexible region\n
+\t-e | --sampledrmsd\t\tcalculate local and global rmsd of sampled region \n
 \t-b | --beff\t\tcalculate Beff for the target (requires TARGET.aln)\n
 \t-ge | --gathereigen\tgather EigenTHREADER scores from output files\n
 \t-gp | --gatherpcons\tgather Pcons scores from output files\n
@@ -107,6 +109,12 @@ while [ ! $# -eq 0 ]; do
       ;;
     --stmscore | -sm)
       RUN_STMSCORE=true
+      ;;
+    --flexrmsd | -f)
+      RUN_FLEX_RMSD=true
+      ;;
+    --sampledrmsd | -e)
+      RUN_END_RMSD=true
       ;;
     --lddt | -l)
       RUN_LDDT=true
@@ -302,6 +310,22 @@ if [ $RUN_BEFF = true ]; then
   echo "Calculating Beff..."
   $QA/bin/calculate_bf $TARGET.aln | awk '{print $2}' > $TARGET.beff
   echo "Done: $TARGET.beff"
+fi
+
+if [ $RUN_FLEX_RMSD = true ]; then
+  if [ -f $TARGET.flexscores ]; then 
+    rm $TARGET.flexscores
+  fi
+  python3 $QA/bin/get_RMSDs.py $TARGET . $TARGET --region "flex" --nosuperimpose
+  echo "Done: $TARGET.flexscores"
+fi
+
+if [ $RUN_END_RMSD = true ]; then
+  if [ -f $TARGET.sampledscores ]; then 
+    rm $TARGET.sampledscores
+  fi
+  python3 $QA/bin/get_RMSDs.py $TARGET . $TARGET --region "sampled" --nosuperimpose
+  echo "Done: $TARGET.sampledscores"
 fi
 
 
