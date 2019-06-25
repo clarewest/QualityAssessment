@@ -143,7 +143,7 @@ def score_target(target, nosuperimpose_flag):
 
     ###########################################
 
-    with open(target.pdbcode + ".lst", "r") as f:
+    with open(target.datadir + target.pdbcode + ".lst", "r") as f:
         decoys = [ target.modeldir + "/" + line.strip() for line in f ]
 
     if target.region == "end":
@@ -160,8 +160,11 @@ def score_target(target, nosuperimpose_flag):
 
     with open(target.pdbcode + suffix,'a') as fout:
         for count, decoy in enumerate(decoys):
-            decoyname = decoy.rsplit('/',1)[1]
-            decoy_structure = pdb_parser.get_structure(target.pdbcode, decoy)
+            decoyname = decoy.rsplit('/')[-1]
+            try:
+                decoy_structure = pdb_parser.get_structure(target.pdbcode, target.datadir + decoy)
+            except FileNotFoundError:
+                print("ERROR File not found:", target.datadir + decoy) 
             try:
                 decoy_chain = decoy_structure[0]
             except KeyError:
@@ -200,7 +203,7 @@ def score_target(target, nosuperimpose_flag):
             local_rmsd = super_imposer.rms
 
             ## Output RMSD of model
-            fout.write("{}\t{:.6f}\t{:.6f}\t{:.6f}\n".format(decoyname, segment_rmsd, global_rmsd, local_rmsd))    
+            fout.write("{}\t{:.3f}\t{:.3f}\t{:.3f}\n".format(decoyname, segment_rmsd, global_rmsd, local_rmsd))    
 
             if (ndecoys - count) % 100 == 0:
                 print("Remaining:", ndecoys - count)
