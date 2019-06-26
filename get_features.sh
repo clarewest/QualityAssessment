@@ -48,6 +48,7 @@ Optional arguments:\n
 \t-p | --pcons\t\trun Pcons for all models and gather scores\n
 \t-q | --proq\t\trun ProQ3D for all models and gather scores \n
 \t-m | --tmscore\t\tcalculate TM-score for all models\n
+\t-sm | --stmscore\t\tcalculate sampled TM-score for all models\n
 \t-l | --lddt\t\tcalculate lddt for all models\n
 \t-f | --flexrmsd\t\tcalculate local and global rmsd of flexible region\n
 \t-e | --sampledrmsd\t\tcalculate local and global rmsd of sampled region \n
@@ -169,6 +170,12 @@ watcher () {
     PERCENT=$((i/5))
     echo -ne "$i $PERCENT"%"[...]\r"
 }
+
+### Check there is a list of models
+if [ ! -s $TARGET.lst ];
+  echo "ERROR No model list given for target: " $TARGET
+  exit
+fi
 
 
 ### PPV: Get true contacts and calculate target PPVs ###
