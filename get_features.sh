@@ -172,7 +172,7 @@ watcher () {
 }
 
 ### Check there is a list of models
-if [ ! -s $TARGET.lst ];
+if [ ! -s $TARGET.lst ]; then 
   echo "ERROR No model list given for target: " $TARGET
   exit
 fi
@@ -449,6 +449,10 @@ fi
 
 if [ $GATHER_SAMPLED = true ]; then 
   echo "Gathering sampled LDDT scores..."
+  if [ -f $TARGET.local_lddts ]; then rm $TARGET.local_lddts; fi
+  if [ -f $TARGET.sampledpcons ]; then rm $TARGET.sampledpcons; fi
+  if [ -f $TARGET.localproq3dscores ]; then rm $TARGET.localproq3dscores; fi
+
   $QA/bin/get_local_lddts $TARGET.all_lddts $BEGIN $END | cut -d "/" -f2- > $TARGET.local_lddts
   echo "Done: $TARGET.local_lddts"
   echo "Gathering sampled PCons scores..."
